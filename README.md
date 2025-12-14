@@ -128,7 +128,7 @@ CREATE TABLE kyzlakov_2261.Inventory (
 ![Таблица](docs/images/tables.png)
 ![Колонки](docs/images/columns.png)
 ---
-## Заполнение таблиц данными
+## 
 
 ```sql
 INSERT INTO kyzlakov_2261.Shop (shop_name, address, floor_space) VALUES
@@ -161,7 +161,6 @@ INSERT INTO kyzlakov_2261.Inventory (shop_number, product_id, unit_of_measure, u
 (5, 5, 'кг', 53.50, 110.00);
 
 ```
-!(docs/images/output1.png)
 ---
 
 ## Примеры запросов
@@ -184,7 +183,7 @@ JOIN kyzlakov_2261.product p ON i.product_id = p.product_id
 WHERE s.shop_number IN (1, 2, 3)
 ORDER BY s.shop_number, p.product_name;
 ```
-!(docs/images/output1.png)
+![Вывод 2](docs/images/output1.png)
 
 ### 2. Самые дорогие товары каждого магазина
 
@@ -206,7 +205,7 @@ WHERE i.unit_price = (
 ORDER BY s.shop_number;
 
 ```
-!(docs/images/output2.png)
+![Вывод 3](docs/images/output2.png)
 
 ### 3. Магазины с запасом молочных продуктов
 
