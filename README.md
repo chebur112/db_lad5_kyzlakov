@@ -125,8 +125,8 @@ CREATE TABLE kyzlakov_2261.Inventory (
 );
 ```
 ---
-(docs/images/tables.png)
-(docs/images/columns.png)
+[Таблицы](docs/images/tables.png)
+[Колонки](docs/images/columns.png)
 ---
 ## Заполнение таблиц данными
 
