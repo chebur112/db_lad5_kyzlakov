@@ -89,24 +89,7 @@ Telegram: [at]chebur1811
 
 ![Физическая модель](docs/images/physical-model.png)
 
-### Индексы для оптимизации
 
-```sql
--- Для быстрого поиска по адресу магазина
-CREATE INDEX idx_shop_address ON Shop(address);
-
--- Для быстрого поиска товаров по названию
-CREATE INDEX idx_product_name ON Product(product_name);
-
--- Для быстрого поиска товаров в магазине
-CREATE INDEX idx_inventory_shop ON Inventory(shop_number);
-
--- Для быстрого поиска магазинов с товаром
-CREATE INDEX idx_inventory_product ON Inventory(product_id);
-
--- Комбинированный индекс для частых запросов
-CREATE INDEX idx_inventory_shop_product ON Inventory(shop_number, product_id);
-```
 
 ---
 
@@ -115,43 +98,70 @@ CREATE INDEX idx_inventory_shop_product ON Inventory(shop_number, product_id);
 ### Полный скрипт создания базы данных
 
 ```sql
--- Таблица магазинов
-CREATE TABLE Shop (
-    shop_number INTEGER PRIMARY KEY,
-    shop_name VARCHAR(150) NOT NULL UNIQUE,
-    address VARCHAR(255) NOT NULL,
-    area NUMERIC(10, 2) NOT NULL CHECK (area > 0)
+CREATE TABLE kyzlakov_2261.Shop (
+    shop_number SERIAL PRIMARY KEY,
+    shop_name VARCHAR(100) NOT NULL,
+    address VARCHAR(200) NOT NULL,
+    floor_space NUMERIC(8,2) CHECK (floor_space > 0)
 );
 
--- Таблица товаров
-CREATE TABLE Product (
+CREATE TABLE kyzlakov_2261.Product (
     product_id SERIAL PRIMARY KEY,
     product_name VARCHAR(150) NOT NULL,
     variety VARCHAR(100),
     UNIQUE(product_name, variety)
 );
 
--- Таблица инвентаря (товары в магазинах)
-CREATE TABLE Inventory (
+CREATE TABLE kyzlakov_2261.Inventory (
     inventory_id SERIAL PRIMARY KEY,
     shop_number INTEGER NOT NULL,
     product_id INTEGER NOT NULL,
     unit_of_measure VARCHAR(50) NOT NULL,
-    unit_price NUMERIC(10, 2) NOT NULL CHECK (unit_price > 0),
-    quantity NUMERIC(10, 2) NOT NULL CHECK (quantity >= 0),
-    FOREIGN KEY (shop_number) REFERENCES Shop(shop_number) ON DELETE CASCADE,
-    FOREIGN KEY (product_id) REFERENCES Product(product_id) ON DELETE CASCADE,
+    unit_price NUMERIC(10,2) NOT NULL CHECK (unit_price > 0),
+    quantity NUMERIC(10,2) NOT NULL CHECK (quantity >= 0),
+    FOREIGN KEY (shop_number) REFERENCES kyzlakov_2261.Shop(shop_number) ON DELETE CASCADE,
+    FOREIGN KEY (product_id) REFERENCES kyzlakov_2261.Product(product_id) ON DELETE CASCADE,
     UNIQUE(shop_number, product_id)
 );
-
--- Создание индексов для оптимизации запросов
-CREATE INDEX idx_shop_address ON Shop(address);
-CREATE INDEX idx_product_name ON Product(product_name);
-CREATE INDEX idx_inventory_shop ON Inventory(shop_number);
-CREATE INDEX idx_inventory_product ON Inventory(product_id);
-CREATE INDEX idx_inventory_shop_product ON Inventory(shop_number, product_id);
 ```
+---
+(docs/images/tables.png)
+(docs/images/columns.png)
+---
+## Заполнение таблиц данными
 
+```sql
+INSERT INTO kyzlakov_2261.Shop (shop_name, address, floor_space) VALUES
+('Продукты №1', 'ул. Ленина 10, Москва', 250.50),
+('Супермаркет №2', 'пр. Мира 25, Санкт-Петербург', 450.00),
+('Мини-маркет Центр', 'ул. Советская 5, Екатеринбург', 120.75),
+('Гастроном Элитный', 'ул. Победы 1, Новосибирск', 320.00),
+('Дисконт №3', 'ш. Энтузиастов 15, Казань', 180.25);
+ 
+INSERT INTO kyzlakov_2261.Product (product_name, variety) VALUES
+('Молоко', '2.5% жирности'),
+('Хлеб', 'Белый'),
+('Яйца', 'Куриные 10шт'),
+('Масло сливочное', '82%'),
+('Сахар', 'Белый песок'),
+('Кефир', '1% жирности');
+
+INSERT INTO kyzlakov_2261.Inventory (shop_number, product_id, unit_of_measure, unit_price, quantity) VALUES
+(1, 1, 'литр', 85.50, 120.00),
+(1, 2, 'кг', 45.20, 80.50),
+(1, 3, 'упаковка', 95.00, 45.00),
+(2, 1, 'литр', 82.90, 200.00),
+(2, 4, 'кг', 650.00, 25.50),
+(2, 5, 'кг', 54.90, 75.00),
+(3, 3, 'упаковка', 92.50, 30.00),
+(3, 6, 'литр', 78.00, 90.00),
+(4, 2, 'кг', 47.00, 60.00),
+(4, 4, 'кг', 660.00, 18.00),
+(5, 1, 'литр', 84.00, 150.00),
+(5, 5, 'кг', 53.50, 110.00);
+
+```
+(docs/images/output1.png)
 ---
 
 ## Примеры запросов
@@ -159,8 +169,7 @@ CREATE INDEX idx_inventory_shop_product ON Inventory(shop_number, product_id);
 ### 1. Товары в заданных магазинах со стоимостью
 
 ```sql
--- Для магазинов с номерами 1, 2, 3
-SELECT
+SELECT 
     s.shop_number AS "Номер магазина",
     s.shop_name AS "Наименование магазина",
     p.product_name AS "Товар",
@@ -168,73 +177,51 @@ SELECT
     i.unit_of_measure AS "Единица измерения",
     i.unit_price AS "Цена за единицу",
     i.quantity AS "Количество",
-    (i.unit_price * i.quantity) AS "Стоимость"
-FROM Inventory i
-JOIN Shop s ON i.shop_number = s.shop_number
-JOIN Product p ON i.product_id = p.product_id
+    (i.unit_price * i.quantity)::NUMERIC(12,2) AS "Стоимость"
+FROM kyzlakov_2261.inventory i
+JOIN kyzlakov_2261.shop s ON i.shop_number = s.shop_number
+JOIN kyzlakov_2261.product p ON i.product_id = p.product_id
 WHERE s.shop_number IN (1, 2, 3)
 ORDER BY s.shop_number, p.product_name;
 ```
+(docs/images/output1.png)
 
-### 2. Информация о магазинах с средней площадью
-
-```sql
-SELECT
-    s.shop_number AS "Номер магазина",
-    s.shop_name AS "Наименование магазина",
-    s.address AS "Адрес",
-    s.area AS "Площадь (м²)",
-    ROUND(AVG(s.area) OVER (), 2) AS "Средняя площадь всех магазинов"
-FROM Shop s
-ORDER BY s.address;
-```
-
-### 3. Товары в конкретном магазине с итоговой стоимостью
+### 2. Самые дорогие товары каждого магазина
 
 ```sql
--- Для магазина с номером 1
-SELECT
+SELECT 
+    s.shop_name AS "Магазин",
     p.product_name AS "Товар",
     p.variety AS "Сорт",
-    i.unit_of_measure AS "Единица",
-    i.unit_price AS "Цена",
-    i.quantity AS "Кол-во",
-    (i.unit_price * i.quantity) AS "Стоимость"
-FROM Inventory i
-JOIN Product p ON i.product_id = p.product_id
-WHERE i.shop_number = 1
-ORDER BY p.product_name;
-```
-
-### 4. Общая стоимость товаров в каждом магазине
-
-```sql
-SELECT
-    s.shop_number AS "Номер магазина",
-    s.shop_name AS "Наименование магазина",
-    ROUND(SUM(i.unit_price * i.quantity), 2) AS "Общая стоимость товаров"
-FROM Inventory i
-JOIN Shop s ON i.shop_number = s.shop_number
-GROUP BY s.shop_number, s.shop_name
-ORDER BY s.shop_name;
-```
-
-### 5. Магазины, где есть конкретный товар
-
-```sql
--- Поиск товара "Молоко"
-SELECT
-    s.shop_number AS "Номер магазина",
-    s.shop_name AS "Магазин",
-    s.address AS "Адрес",
-    i.unit_price AS "Цена",
+    i.unit_price AS "Цена за ед.",
     i.quantity AS "Количество"
-FROM Inventory i
-JOIN Shop s ON i.shop_number = s.shop_number
-JOIN Product p ON i.product_id = p.product_id
-WHERE p.product_name = 'Молоко'
-ORDER BY i.unit_price;
+FROM kyzlakov_2261.inventory i
+JOIN kyzlakov_2261.shop s ON i.shop_number = s.shop_number
+JOIN kyzlakov_2261.product p ON i.product_id = p.product_id
+WHERE i.unit_price = (
+    SELECT MAX(unit_price) 
+    FROM kyzlakov_2261.inventory i2 
+    WHERE i2.shop_number = i.shop_number
+)
+ORDER BY s.shop_number;
+
 ```
+(docs/images/output2.png)
+
+### 3. Магазины с запасом молочных продуктов
+
+```sql
+SELECT DISTINCT
+    s.shop_number AS "№",
+    s.shop_name AS "Магазин",
+    s.address AS "Адрес"
+FROM kyzlakov_2261.inventory i
+JOIN kyzlakov_2261.shop s ON i.shop_number = s.shop_number
+JOIN kyzlakov_2261.product p ON i.product_id = p.product_id
+WHERE p.product_name IN ('Молоко', 'Кефир')
+ORDER BY s.shop_number;
+```
+(docs/images/output3.png)
 
 ---
 
