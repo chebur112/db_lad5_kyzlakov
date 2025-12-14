@@ -183,7 +183,7 @@ JOIN kyzlakov_2261.product p ON i.product_id = p.product_id
 WHERE s.shop_number IN (1, 2, 3)
 ORDER BY s.shop_number, p.product_name;
 ```
-![Вывод 2](docs/images/output1.png)
+![Вывод 1](docs/images/output1.png)
 
 ### 2. Самые дорогие товары каждого магазина
 
@@ -205,7 +205,7 @@ WHERE i.unit_price = (
 ORDER BY s.shop_number;
 
 ```
-![Вывод 3](docs/images/output2.png)
+![Вывод 2](docs/images/output2.png)
 
 ### 3. Магазины с запасом молочных продуктов
 
@@ -220,7 +220,7 @@ JOIN kyzlakov_2261.product p ON i.product_id = p.product_id
 WHERE p.product_name IN ('Молоко', 'Кефир')
 ORDER BY s.shop_number;
 ```
-!(docs/images/output3.png)
+![Вывод 3](docs/images/output3.png)
 
 ---
 
