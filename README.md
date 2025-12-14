@@ -125,7 +125,7 @@ CREATE TABLE kyzlakov_2261.Inventory (
 );
 ```
 ---
-[Таблицы](docs/images/tables.png)
+[Концептуальная модель ER](docs/images/er-diagram.png)
 [Колонки](docs/images/columns.png)
 ---
 ## Заполнение таблиц данными
