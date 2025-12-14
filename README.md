@@ -1,4 +1,4 @@
-**Лабораторные работы по БД**
+<img width="573" height="166" alt="image" src="https://github.com/user-attachments/assets/3289f50b-8f5b-4bf0-82d3-b7db8161b064" />**Лабораторные работы по БД**
 
 Перечень [лабораторных работ](https://edu.irnok.net/doku.php?id=db:main#%D0%BB%D0%B0%D0%B1%D0%BE%D1%80%D0%B0%D1%82%D0%BE%D1%80%D0%BD%D0%B0%D1%8F_%D1%80%D0%B0%D0%B1%D0%BE%D1%82%D0%B0_5_%D1%82%D1%80%D0%B8%D0%B3%D0%B3%D0%B5%D1%80%D1%8B)
 
@@ -225,145 +225,158 @@ ORDER BY s.shop_number;
 ---
 # Лабораторная работа 3
 
-## Представления (Views) для выходных документов
+## 1. Создание представлений для выходных документов
 
-### Представление 1: Товары в магазинах со стоимостью
-
+**Представление 1:** Товары магазинов 1,2,3
 ```sql
-CREATE OR REPLACE VIEW products_in_shops_view AS
-SELECT
-    s.shop_number AS "Номер магазина",
-    s.shop_name AS "Наименование магазина",
-    p.product_name AS "Товар",
-    p.variety AS "Сорт",
-    i.unit_of_measure AS "Единица измерения",
-    i.unit_price AS "Цена за единицу",
-    i.quantity AS "Количество",
-    ROUND(i.unit_price * i.quantity, 2) AS "Стоимость"
-FROM Inventory i
-JOIN Shop s ON i.shop_number = s.shop_number
-JOIN Product p ON i.product_id = p.product_id
+**Представление 1:** Товары магазинов 1,2,3
+```sql
+CREATE OR REPLACE VIEW kyzlakov_2261.shop1_2_3_report AS
+SELECT 
+    s.shop_number, 
+    s.shop_name, 
+    p.product_name, 
+    p.variety,
+    i.unit_of_measure, 
+    i.unit_price, 
+    i.quantity,
+    i.unit_price * i.quantity AS total_cost
+FROM kyzlakov_2261.inventory i
+JOIN kyzlakov_2261.shop s ON i.shop_number = s.shop_number
+JOIN kyzlakov_2261.product p ON i.product_id = p.product_id
+WHERE s.shop_number IN (1, 2, 3)
 ORDER BY s.shop_number, p.product_name;
+
 ```
 
-### Представление 2: Информация о магазинах со средней площадью
+**Использование**
+```sql
+SELECT shop_number, shop_name, product_name, total_cost
+FROM kyzlakov_2261.shop1_2_3_report
+WHERE shop_number = 1
+ORDER BY total_cost DESC;
+
+
+```
+
+**Использование**
+```sql
+CREATE OR REPLACE VIEW kyzlakov_2261.shops_by_address AS
+SELECT shop_number, shop_name, address, floor_space
+FROM kyzlakov_2261.shop
+ORDER BY shop_name;
+
+```
+**Результат использования:**
+![upr1](docs/images/upr1.png)
+---
+
+**Представление 2:** Магазины по адресам
 
 ```sql
-CREATE OR REPLACE VIEW shops_with_avg_area_view AS
-SELECT
-    s.shop_number AS "Номер магазина",
-    s.shop_name AS "Наименование магазина",
-    s.address AS "Адрес",
-    s.area AS "Площадь (м²)",
-    ROUND(AVG(s.area) OVER (), 2) AS "Средняя площадь магазинов"
-FROM Shop s
-ORDER BY s.address;
+sql
+CREATE OR REPLACE VIEW kyzlakov_2261.shops_by_address AS
+SELECT shop_number, shop_name, address, floor_space
+FROM kyzlakov_2261.shop
+ORDER BY shop_name;
 ```
-
+**Использование**
+```sql
+SELECT shop_number, shop_name, address
+FROM kyzlakov_2261.shops_by_address
+WHERE floor_space > 200
+ORDER BY shop_name;
+```
+**Результат использования:**
+![upr2](docs/images/upr2.png)
 ---
 
-## Примеры тестовых данных
+## 2. Разработка хранимых процедур с параметрами
+**Процедура 1:** Анализ магазина по номеру
 
 ```sql
--- Вставка магазинов
-INSERT INTO Shop (shop_number, shop_name, address, area) VALUES
-(1, 'Магазин №1', 'ул. Ленина, 10', 250.50),
-(2, 'Магазин №2', 'ул. Советская, 25', 180.75),
-(3, 'Магазин №3', 'пр. Мира, 5', 320.00),
-(4, 'Магазин №4', 'ул. Пушкина, 15', 200.25);
-
--- Вставка товаров
-INSERT INTO Product (product_name, variety) VALUES
-('Молоко', 'Коровье'),
-('Молоко', 'Козье'),
-('Хлеб', 'Пшеничный'),
-('Хлеб', 'Ржаной'),
-('Яйца', 'Куриные'),
-('Масло', 'Сливочное');
-
--- Вставка инвентаря
-INSERT INTO Inventory (shop_number, product_id, unit_of_measure, unit_price, quantity) VALUES
-(1, 1, 'л', 80.00, 50),
-(1, 3, 'шт', 45.00, 100),
-(1, 5, 'дз', 120.00, 20),
-(2, 1, 'л', 78.00, 60),
-(2, 2, 'л', 150.00, 15),
-(2, 4, 'шт', 50.00, 80),
-(3, 3, 'шт', 42.00, 150),
-(3, 6, 'кг', 250.00, 30),
-(4, 1, 'л', 82.00, 45),
-(4, 5, 'дз', 125.00, 25);
+CREATE OR REPLACE PROCEDURE kyzlakov_2261.get_shop_stats(
+    p_shop_number INTEGER
+)
+LANGUAGE plpgsql
+AS $$
+BEGIN
+    SELECT 
+        COUNT(*) as total_items,
+        SUM(unit_price * quantity) as total_cost
+    FROM kyzlakov_2261.inventory 
+    WHERE shop_number = p_shop_number;
+END;
+$$;
 ```
+![proc1](docs/images/proc1.png)
 
----
+**Процедура 2:** Запись пациента на прием  
 
-## Проверка нормальных форм
-
-| Нормальная форма | Состояние | Комментарий |
-|---|---|---|
-| **1NF** | ✅ Выполнена | Все атрибуты атомарны, нет повторяющихся групп |
-| **2NF** | ✅ Выполнена | Нет зависимостей неключевых атрибутов от части составного ключа |
-| **3NF** | ✅ Выполнена | Нет транзитивных зависимостей между неключевыми атрибутами |
-| **BCNF** | ✅ Выполнена | Все детерминанты являются потенциальными ключами |
-
-### Подробная проверка
-
-**Первая нормальная форма (1NF)**
-- Таблица Shop: Все значения атомарны (shop_number - целое число, shop_name - строка, address - строка, area - число)
-- Таблица Product: Все значения атомарны (product_id - число, product_name - строка, variety - строка)
-- Таблица Inventory: Все значения атомарны (inventory_id - число, shop_number - число, product_id - число, unit_of_measure - строка, unit_price - число, quantity - число)
-
-**Вторая нормальная форма (2NF)**
-- В таблице Inventory составной ключ (shop_number, product_id) уникален
-- Все неключевые атрибуты (unit_of_measure, unit_price, quantity) зависят от всего ключа, а не от его части
-
-**Третья нормальная форма (3NF)**
-- Нет транзитивных зависимостей
-- shop_name зависит только от shop_number, а не от других атрибутов Shop
-- product_name и variety зависят только от product_id
-
-**Нормальная форма Бойса-Кодда (BCNF)**
-- Единственным детерминантом является первичный ключ каждой таблицы
-- Все функциональные зависимости имеют детерминант, являющийся потенциальным ключом
-
----
-
-## Преимущества модели
-
-1. **Гибкость**: Товар может продаваться в разных магазинах с разными ценами
-2. **Масштабируемость**: Легко добавлять новые магазины, товары и записи инвентаря
-3. **Целостность данных**: FOREIGN KEY constraints гарантируют консистентность
-4. **Производительность**: Индексы оптимизируют частые запросы
-5. **Избежание дублирования**: Нормализованная структура минимизирует дублирование данных
-6. **Гибкость цен**: Один товар может иметь разные цены в разных магазинах
-
----
-
-## Расширение модели (опционально)
-
-Для более расширенной функциональности можно добавить:
 
 ```sql
--- Таблица категорий товаров
-CREATE TABLE Category (
-    category_id SERIAL PRIMARY KEY,
-    category_name VARCHAR(100) NOT NULL UNIQUE
-);
+CREATE OR REPLACE PROCEDURE kyzlakov_2261.get_shop_stats(
+    p_shop_number INTEGER
+)
+LANGUAGE plpgsql
+AS $$
+BEGIN
+    SELECT 
+        COUNT(*) as total_items,
+        SUM(unit_price * quantity) as total_cost
+    FROM kyzlakov_2261.inventory 
+    WHERE shop_number = p_shop_number;
+END;
+$$;
 
--- Модификация таблицы Product с категорией
-ALTER TABLE Product ADD COLUMN category_id INTEGER REFERENCES Category(category_id);
+```
+![proc2](docs/images/proc2.png)
+---
+## Проверка работы
 
--- Таблица истории цен
-CREATE TABLE PriceHistory (
-    price_history_id SERIAL PRIMARY KEY,
-    inventory_id INTEGER NOT NULL REFERENCES Inventory(inventory_id),
-    old_price NUMERIC(10, 2),
-    new_price NUMERIC(10, 2),
-    change_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
+**Проверка представлений:**
+```sql
+SELECT * FROM kyzlakov_2261.shop1_2_3_report LIMIT 3;
+SELECT * FROM kyzlakov_2261.shops_by_address LIMIT 3;
+```
+![ppr1](docs/images/ppr1.png)
+![ppr2](docs/images/ppr2.png)
+
+**Проверка процедур:**
+```sql
+CALL kyzlakov_2261.get_shop_stats(1);
+CALL kyzlakov_2261.add_product_to_shop(2, 'Чай', 'Зеленый');
+
+```
+![call1](docs/images/call1.png)
+![call2](docs/images/call2.png)
+---
+## 3. Представление сложных запросов при помощи представления
+**Сложное представление:**ТОП товаров по выручке всех магазинов
+```sql
+CREATE OR REPLACE VIEW kyzlakov_2261.top_products_by_revenue AS
+SELECT 
+    s.shop_number,
+    s.shop_name,
+    p.product_name,
+    p.variety,
+    SUM(i.quantity) as total_quantity,
+    SUM(i.unit_price * i.quantity) as total_revenue,
+    RANK() OVER (ORDER BY SUM(i.unit_price * i.quantity) DESC) as revenue_rank
+FROM kyzlakov_2261.inventory i
+JOIN kyzlakov_2261.shop s ON i.shop_number = s.shop_number
+JOIN kyzlakov_2261.product p ON i.product_id = p.product_id
+GROUP BY s.shop_number, s.shop_name, p.product_name, p.variety
+HAVING SUM(i.unit_price * i.quantity) > 5000
+ORDER BY total_revenue DESC;
+
 ```
 
----
----
-
+**Использование сложного представления (анализ загрузки):**
+```sql
+SELECT shop_name, product_name, total_revenue, revenue_rank
+FROM kyzlakov_2261.top_products_by_revenue
+WHERE revenue_rank <= 5;
+```
+![flex](docs/images/flex.png)
 
