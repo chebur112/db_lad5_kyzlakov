@@ -223,6 +223,7 @@ ORDER BY s.shop_number;
 ![Вывод 3](docs/images/output3.png)
 
 ---
+# Лабораторная работа 3
 
 ## Представления (Views) для выходных документов
 
@@ -362,6 +363,7 @@ CREATE TABLE PriceHistory (
 );
 ```
 
+---
 ---
 
 
