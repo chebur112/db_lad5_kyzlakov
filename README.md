@@ -229,8 +229,6 @@ ORDER BY s.shop_number;
 
 **Представление 1:** Товары магазинов 1,2,3
 ```sql
-**Представление 1:** Товары магазинов 1,2,3
-```sql
 CREATE OR REPLACE VIEW kyzlakov_2261.shop1_2_3_report AS
 SELECT 
     s.shop_number, 
@@ -259,14 +257,6 @@ ORDER BY total_cost DESC;
 
 ```
 
-**Использование**
-```sql
-CREATE OR REPLACE VIEW kyzlakov_2261.shops_by_address AS
-SELECT shop_number, shop_name, address, floor_space
-FROM kyzlakov_2261.shop
-ORDER BY shop_name;
-
-```
 **Результат использования:**
 ![upr1](docs/images/upr1.png)
 ---
@@ -274,12 +264,12 @@ ORDER BY shop_name;
 **Представление 2:** Магазины по адресам
 
 ```sql
-sql
 CREATE OR REPLACE VIEW kyzlakov_2261.shops_by_address AS
 SELECT shop_number, shop_name, address, floor_space
 FROM kyzlakov_2261.shop
 ORDER BY shop_name;
 ```
+
 **Использование**
 ```sql
 SELECT shop_number, shop_name, address
@@ -287,6 +277,7 @@ FROM kyzlakov_2261.shops_by_address
 WHERE floor_space > 200
 ORDER BY shop_name;
 ```
+
 **Результат использования:**
 ![upr2](docs/images/upr2.png)
 ---
@@ -309,8 +300,6 @@ BEGIN
 END;
 $$;
 ```
-![proc1](docs/images/proc1.png)
-
 **Процедура 2:** Запись пациента на прием  
 
 
@@ -330,7 +319,7 @@ END;
 $$;
 
 ```
-![proc2](docs/images/proc2.png)
+
 ---
 ## Проверка работы
 
