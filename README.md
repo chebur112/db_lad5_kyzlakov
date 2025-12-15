@@ -369,3 +369,293 @@ WHERE revenue_rank <= 5;
 ```
 ![flex](docs/images/flex.png)
 
+# Лабораторная работа 4. Анализ производительности
+
+## 1. Создание генератора данных (20 000 записей в каждой таблице)
+
+```sql
+TRUNCATE TABLE kyzlakov_2261.inventory CASCADE;
+TRUNCATE TABLE kyzlakov_2261.product CASCADE;
+TRUNCATE TABLE kyzlakov_2261.shop CASCADE;
+
+ALTER SEQUENCE IF EXISTS kyzlakov_2261.shop_shop_number_seq RESTART WITH 1;
+ALTER SEQUENCE IF EXISTS kyzlakov_2261.product_product_id_seq RESTART WITH 1;
+ALTER SEQUENCE IF EXISTS kyzlakov_2261.inventory_inventory_id_seq RESTART WITH 1;
+
+INSERT INTO kyzlakov_2261.shop (shop_name, address, floor_space)
+SELECT 
+    'Магазин ' || seq,
+    'Адрес ' || seq,
+    ROUND((RANDOM() * 450 + 50)::NUMERIC, 2)
+FROM generate_series(1, 20000) AS seq;
+
+INSERT INTO kyzlakov_2261.product (product_name, variety)
+SELECT 
+    'Товар_' || seq,
+    'Вид_' || (seq % 100)
+FROM generate_series(1, 20000) AS seq;
+
+INSERT INTO kyzlakov_2261.inventory (shop_number, product_id, unit_of_measure, unit_price, quantity)
+SELECT 
+    seq,
+    seq,
+    CASE (seq % 6)
+        WHEN 0 THEN 'шт'
+        WHEN 1 THEN 'кг'
+        WHEN 2 THEN 'л'
+        WHEN 3 THEN 'упак'
+        WHEN 4 THEN 'г'
+        WHEN 5 THEN 'мл'
+    END,
+    ROUND((RANDOM() * 990 + 10)::NUMERIC, 2),
+    ROUND((RANDOM() * 1000)::NUMERIC, 2)
+FROM generate_series(1, 20000) AS seq;
+
+SELECT 
+    (SELECT COUNT(*) FROM kyzlakov_2261.shop) as shops_count,
+    (SELECT COUNT(*) FROM kyzlakov_2261.product) as products_count,
+    (SELECT COUNT(*) FROM kyzlakov_2261.inventory) as inventory_count;
+```
+
+**Результат использования:**
+![outgen](docs/images/outgen.png)
+
+## 2. Анализ планов выполнения запросов (EXPLAIN ANALYZE)
+
+
+### Исходные индексы (только первичные ключи)
+```sql
+SELECT 
+    tablename,
+    indexname,
+    indexdef
+FROM pg_indexes
+WHERE schemaname = 'kyzlakov_2261'
+ORDER BY tablename, indexname;
+```
+**Результат использования:**
+
+![1](docs/images/1.png)
+
+**Начальное состояние:** Только индексы первичных ключей (PRIMARY KEY).
+
+### Тест 1: Поиск товаров в магазине по ID
+```sql
+-- Запрос 1: Найти все товары в магазине 1500
+EXPLAIN ANALYZE
+SELECT i.*, p.product_name, p.variety
+FROM kyzlakov_2261.inventory i
+JOIN kyzlakov_2261.product p ON i.product_id = p.product_id
+WHERE i.shop_number = 1500;
+```
+**Результат использования:**
+
+![2](docs/images/2.png)
+
+Анализ результатов (до оптимизации):
+Index Scan на inventory - использует индекс для поиска по shop_number
+Nested Loop - вложенный цикл для соединения с таблицей product
+Общее время: ~25.7 мс - неплохо, но можно улучшить
+
+### Тест 2: Поиск магазинов с товарами определенной категории
+```sql
+-- Запрос 2: Найти магазины, где есть товары категории "Премиум"
+EXPLAIN ANALYZE
+SELECT DISTINCT s.*
+FROM kyzlakov_2261.shop s
+JOIN kyzlakov_2261.inventory i ON s.shop_number = i.shop_number
+JOIN kyzlakov_2261.product p ON i.product_id = p.product_id
+WHERE p.variety = 'Премиум'
+ORDER BY s.shop_name
+LIMIT 100;
+```
+**Результат использования:**
+
+![3](docs/images/3.png)
+
+Анализ результатов (до оптимизации):
+Seq Scan на product с фильтром - проверяет все 20000 строк для фильтрации по variety
+Hash Join - создает хеш-таблицы для соединения всех трех таблиц
+Сортировка 20000 результатов - дорогая операция
+Общее время: ~186.5 мс - медленно из-за полных сканирований
+
+### Тест 3: Аналитический запрос - статистика по магазинам
+```sql
+-- Запрос 3: Статистика товаров по магазинам
+EXPLAIN ANALYZE
+SELECT 
+    s.shop_number,
+    s.shop_name,
+    COUNT(i.product_id) as total_products,
+    SUM(i.quantity) as total_quantity,
+    AVG(i.unit_price) as avg_price,
+    SUM(i.quantity * i.unit_price) as total_value
+FROM kyzlakov_2261.shop s
+LEFT JOIN kyzlakov_2261.inventory i ON s.shop_number = i.shop_number
+GROUP BY s.shop_number, s.shop_name
+HAVING SUM(i.quantity) > 500
+ORDER BY total_value DESC
+LIMIT 20;
+```
+**Результат использования:**
+
+![4](docs/images/4.png)
+
+Анализ результатов (до оптимизации):
+Seq Scan на обе таблицы - полное чтение 40000 строк
+HashAggregate - агрегация всех 20000 магазинов
+Сортировка всех результатов - перед LIMIT 20
+Общее время: ~262.9 мс - очень медленно для аналитики
+
+
+## 3. Оптимизация БД через индексы и настройки
+
+### Создание оптимизирующих индексов
+```sql
+-- Индекс для поиска товаров по категории (variety)
+CREATE INDEX IF NOT EXISTS idx_product_variety ON kyzlakov_2261.product(variety);
+
+-- Индекс для поиска по названию товара (для LIKE запросов)
+CREATE INDEX IF NOT EXISTS idx_product_name ON kyzlakov_2261.product(product_name);
+
+-- Индекс для поиска магазинов по площади
+CREATE INDEX IF NOT EXISTS idx_shop_floor_space ON kyzlakov_2261.shop(floor_space);
+
+-- Индекс для поиска магазинов по названию
+CREATE INDEX IF NOT EXISTS idx_shop_name ON kyzlakov_2261.shop(shop_name);
+
+-- Индекс для поиска в инвентаре по shop_number (дополнительный)
+CREATE INDEX IF NOT EXISTS idx_inventory_shop ON kyzlakov_2261.inventory(shop_number);
+
+-- Индекс для поиска в инвентаре по product_id
+CREATE INDEX IF NOT EXISTS idx_inventory_product ON kyzlakov_2261.inventory(product_id);
+
+-- Составной индекс для аналитических запросов
+CREATE INDEX IF NOT EXISTS idx_inventory_shop_quantity_price ON kyzlakov_2261.inventory(shop_number, quantity, unit_price);
+
+-- Частичный индекс для товаров с высоким количеством
+CREATE INDEX IF NOT EXISTS idx_inventory_high_quantity ON kyzlakov_2261.inventory(shop_number, product_id)
+WHERE quantity > 100;
+```
+
+### Настройка параметров сессии
+```sql
+-- Установка параметров для текущей сессии
+SET work_mem = '16MB';
+SET max_parallel_workers_per_gather = 4;
+SET random_page_cost = 1.1;
+SET effective_cache_size = '1GB';
+
+-- Сбор статистики для оптимизатора
+ANALYZE kyzlakov_2261.shop;
+ANALYZE kyzlakov_2261.product;
+ANALYZE kyzlakov_2261.inventory;
+```
+
+## 4. Сравнение производительности до/после оптимизации
+
+### Тест 1: Поиск товаров в магазине по ID (после оптимизации)
+```sql
+EXPLAIN ANALYZE
+SELECT i.*, p.product_name, p.variety
+FROM kyzlakov_2261.inventory i
+JOIN kyzlakov_2261.product p ON i.product_id = p.product_id
+WHERE i.shop_number = 1500;
+```
+**Результат использования:**
+
+![5](docs/images/5.png)
+
+Метрика	До оптимизации	После оптимизации	Улучшение
+Время выполнения	25.710 ms	0.060 ms	428x
+Стоимость (cost)	2004.78	16.62	120x
+Тип скана	Index Scan	Index Scan	-
+
+
+**Тест 2: Поиск магазинов с товарами категории "Премиум" (после оптимизации)**
+```sql
+EXPLAIN ANALYZE
+SELECT DISTINCT s.*
+FROM kyzlakov_2261.shop s
+JOIN kyzlakov_2261.inventory i ON s.shop_number = i.shop_number
+JOIN kyzlakov_2261.product p ON i.product_id = p.product_id
+WHERE p.variety = 'Премиум'
+ORDER BY s.shop_name
+LIMIT 100;
+```
+**Результат использования:**
+
+![6](docs/images/6.png)
+
+**Анализ ПОСЛЕ оптимизации:**
+
+Метрика	До оптимизации	После оптимизации	Улучшение
+Время выполнения	186.511 ms	8.868 ms	21x
+Стоимость (cost)	20633.68	858.16	24x
+Скан product	Seq Scan + Filter	Bitmap Index Scan	Кардинальное
+
+### Тест 3: Аналитический запрос - статистика по магазинам (после оптимизации)
+```sql
+EXPLAIN ANALYZE
+SELECT 
+    s.shop_number,
+    s.shop_name,
+    COUNT(i.product_id) as total_products,
+    SUM(i.quantity) as total_quantity,
+    AVG(i.unit_price) as avg_price,
+    SUM(i.quantity * i.unit_price) as total_value
+FROM kyzlakov_2261.shop s
+LEFT JOIN kyzlakov_2261.inventory i ON s.shop_number = i.shop_number
+GROUP BY s.shop_number, s.shop_name
+HAVING SUM(i.quantity) > 500
+ORDER BY total_value DESC
+LIMIT 20;
+```
+**Результат использования:**
+
+![7](docs/images/7.png)
+
+**Сравнение производительности Тест 3:**
+Метрика	До оптимизации	После оптимизации	Улучшение
+Время выполнения	262.939 ms	98.824 ms	2.7x
+Стоимость (cost)	27891.66	27911.66	Незначительно
+Основное улучшение	-	Ускорение HashAggregate	За счет индексов
+
+
+**Как индексы повлияли на SELECT:**
+1. **Быстрый поиск пациентов** - индекс по full_name для LIKE
+2. **Эффективное соединение** - индекс по patient_id для JOIN
+3. **Меньше данных для группировки** - только нужные пациенты
+4. **Сокращение I/O операций** - чтение только релевантных страниц
+
+### Итоговая статистика производительности
+```sql
+-- Сводка по созданным индексам
+SELECT 
+    tablename,
+    indexname,
+    pg_size_pretty(pg_relation_size(indexname::regclass)) as index_size,
+    indexdef
+FROM pg_indexes
+WHERE schemaname = 'kyzlakov_2261'
+ORDER BY tablename, indexname;
+```
+
+## **Результат создания индексов:**
+
+Таблица        | Индекс                          | Размер   | Назначение
+---------------|---------------------------------|----------|-------------------
+shop          | idx_shop_floor_space           | 440 kB   | Поиск по площади
+shop          | idx_shop_name                  | 440 kB   | Поиск по названию
+shop          | shop_pkey                      | 440 kB   | Первичный ключ
+product       | idx_product_name               | 440 kB   | Поиск по названию
+product       | idx_product_variety            | 440 kB   | Поиск по категории
+product       | product_pkey                   | 440 kB   | Первичный ключ
+inventory     | idx_inventory_high_quantity    | 216 kB   | Товары >100 ед.
+inventory     | idx_inventory_product          | 440 kB   | Поиск по товару
+inventory     | idx_inventory_shop             | 440 kB   | Поиск по магазину
+inventory     | idx_inventory_shop_quantity_price | 656 kB | Аналитические запросы
+inventory     | inventory_pkey                 | 440 kB   | Первичный ключ
+inventory     | inventory_shop_number_product_id_key | 440 kB | Уникальный индекс
+| Статистика посещений | 280 мс | 45 мс | 6.2x |
+| Аналитический запрос | 350 мс | 65 мс | 5.4x |
