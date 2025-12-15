@@ -654,3 +654,297 @@ inventory     | inventory_pkey                 | 440 kB   | Первичный �
 inventory     | inventory_shop_number_product_id_key | 440 kB | Уникальный индекс
 | Статистика посещений | 280 мс | 45 мс | 6.2x |
 | Аналитический запрос | 350 мс | 65 мс | 5.4x |
+
+
+# Лабораторная работа 5. Триггеры и аудит
+
+
+## Задачи
+1. Триггеры каскадного удаления для связей "один-ко-многим"
+2. Триггеры аудита изменений (INSERT, UPDATE, DELETE) в таблицах
+3. Создание таблицы-журнала для отслеживания изменений
+   
+## Триггеры каскадного удаления
+
+### 1. Каскадное удаление инвентаря при удалении магазина
+```sql
+-- Функция для каскадного удаления записей инвентаря при удалении магазина
+CREATE OR REPLACE FUNCTION kyzlakov_2261.delete_inventory_cascade_shop()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+AS $$
+BEGIN
+    RAISE NOTICE 'Каскадное удаление: удаляем инвентарь магазина % (%)', OLD.shop_number, OLD.shop_name;
+    DELETE FROM kyzlakov_2261.inventory WHERE shop_number = OLD.shop_number;
+    RETURN OLD;
+END;
+$$;
+
+-- Триггер каскадного удаления
+CREATE OR REPLACE TRIGGER trigger_delete_inventory_on_shop_delete
+    BEFORE DELETE ON kyzlakov_2261.shop
+    FOR EACH ROW
+    EXECUTE FUNCTION kyzlakov_2261.delete_inventory_cascade_shop();
+```
+
+### 2. Каскадное удаление инвентаря при удалении товара
+```sql
+-- Функция для каскадного удаления записей инвентаря при удалении товара
+CREATE OR REPLACE FUNCTION kyzlakov_2261.delete_inventory_cascade_product()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+AS $$
+BEGIN
+    RAISE NOTICE 'Каскадное удаление: удаляем инвентарь товара % (%)', OLD.product_id, OLD.product_name;
+    DELETE FROM kyzlakov_2261.inventory WHERE product_id = OLD.product_id;
+    RETURN OLD;
+END;
+$$;
+
+-- Триггер каскадного удаления
+CREATE OR REPLACE TRIGGER trigger_delete_inventory_on_product_delete
+    BEFORE DELETE ON kyzlakov_2261.product
+    FOR EACH ROW
+    EXECUTE FUNCTION kyzlakov_2261.delete_inventory_cascade_product();
+```
+
+
+## Система аудита изменений
+###1. Создание таблиц аудита
+```sql
+-- Таблица аудита для магазинов
+CREATE TABLE IF NOT EXISTS kyzlakov_2261.shop_audit (
+    audit_id SERIAL PRIMARY KEY,
+    operation CHAR(1) NOT NULL,  -- I=INSERT, U=UPDATE, D=DELETE
+    changed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    changed_by TEXT DEFAULT CURRENT_USER,
+    
+    shop_number INTEGER,
+    shop_name VARCHAR(100),
+    address VARCHAR(200),
+    floor_space NUMERIC(8,2),
+    
+    old_shop_name VARCHAR(100),
+    old_address VARCHAR(200),
+    old_floor_space NUMERIC(8,2)
+);
+
+-- Таблица аудита для товаров
+CREATE TABLE IF NOT EXISTS kyzlakov_2261.product_audit (
+    audit_id SERIAL PRIMARY KEY,
+    operation CHAR(1) NOT NULL,
+    changed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    changed_by TEXT DEFAULT CURRENT_USER,
+    
+    product_id INTEGER,
+    product_name VARCHAR(150),
+    variety VARCHAR(100),
+    
+    old_product_name VARCHAR(150),
+    old_variety VARCHAR(100)
+);
+
+-- Таблица аудита для инвентаря
+CREATE TABLE IF NOT EXISTS kyzlakov_2261.inventory_audit (
+    audit_id SERIAL PRIMARY KEY,
+    operation CHAR(1) NOT NULL,
+    changed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    changed_by TEXT DEFAULT CURRENT_USER,
+    
+    inventory_id INTEGER,
+    shop_number INTEGER,
+    product_id INTEGER,
+    unit_of_measure VARCHAR(50),
+    unit_price NUMERIC(10,2),
+    quantity NUMERIC(10,2),
+    
+    old_unit_price NUMERIC(10,2),
+    old_quantity NUMERIC(10,2)
+);
+```
+
+### 2. Триггеры аудита для таблицы shop
+```sql
+-- Функция аудита для таблицы shop
+CREATE OR REPLACE FUNCTION kyzlakov_2261.shop_audit_function()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+AS $$
+BEGIN
+    IF (TG_OP = 'INSERT') THEN
+        INSERT INTO kyzlakov_2261.shop_audit(operation, shop_number, shop_name, address, floor_space)
+        VALUES ('I', NEW.shop_number, NEW.shop_name, NEW.address, NEW.floor_space);
+        RETURN NEW;
+    ELSIF (TG_OP = 'UPDATE') THEN
+        INSERT INTO kyzlakov_2261.shop_audit(operation, shop_number, shop_name, address, floor_space,
+                                            old_shop_name, old_address, old_floor_space)
+        VALUES ('U', NEW.shop_number, NEW.shop_name, NEW.address, NEW.floor_space,
+                OLD.shop_name, OLD.address, OLD.floor_space);
+        RETURN NEW;
+    ELSIF (TG_OP = 'DELETE') THEN
+        INSERT INTO kyzlakov_2261.shop_audit(operation, shop_number, shop_name, address, floor_space)
+        VALUES ('D', OLD.shop_number, OLD.shop_name, OLD.address, OLD.floor_space);
+        RETURN OLD;
+    END IF;
+    RETURN NULL;
+END;
+$$;
+
+-- Триггер аудита
+CREATE OR REPLACE TRIGGER shop_audit_trigger
+    AFTER INSERT OR UPDATE OR DELETE ON kyzlakov_2261.shop
+    FOR EACH ROW
+    EXECUTE FUNCTION kyzlakov_2261.shop_audit_function();
+```
+
+
+### 3. Триггеры аудита для таблицы product
+```sql
+-- Функция аудита для таблицы product
+CREATE OR REPLACE FUNCTION kyzlakov_2261.product_audit_function()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+AS $$
+BEGIN
+    IF (TG_OP = 'INSERT') THEN
+        INSERT INTO kyzlakov_2261.product_audit(operation, product_id, product_name, variety)
+        VALUES ('I', NEW.product_id, NEW.product_name, NEW.variety);
+        RETURN NEW;
+    ELSIF (TG_OP = 'UPDATE') THEN
+        INSERT INTO kyzlakov_2261.product_audit(operation, product_id, product_name, variety,
+                                               old_product_name, old_variety)
+        VALUES ('U', NEW.product_id, NEW.product_name, NEW.variety,
+                OLD.product_name, OLD.variety);
+        RETURN NEW;
+    ELSIF (TG_OP = 'DELETE') THEN
+        INSERT INTO kyzlakov_2261.product_audit(operation, product_id, product_name, variety)
+        VALUES ('D', OLD.product_id, OLD.product_name, OLD.variety);
+        RETURN OLD;
+    END IF;
+    RETURN NULL;
+END;
+$$;
+
+-- Триггер аудита
+CREATE OR REPLACE TRIGGER product_audit_trigger
+    AFTER INSERT OR UPDATE OR DELETE ON kyzlakov_2261.product
+    FOR EACH ROW
+    EXECUTE FUNCTION kyzlakov_2261.product_audit_function();
+```
+
+### 4. Триггеры аудита для таблицы inventory
+```sql
+-- Функция аудита для таблицы inventory
+CREATE OR REPLACE FUNCTION kyzlakov_2261.inventory_audit_function()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+AS $$
+BEGIN
+    IF (TG_OP = 'INSERT') THEN
+        INSERT INTO kyzlakov_2261.inventory_audit(operation, inventory_id, shop_number, product_id, 
+                                                 unit_of_measure, unit_price, quantity)
+        VALUES ('I', NEW.inventory_id, NEW.shop_number, NEW.product_id, 
+                NEW.unit_of_measure, NEW.unit_price, NEW.quantity);
+        RETURN NEW;
+    ELSIF (TG_OP = 'UPDATE') THEN
+        INSERT INTO kyzlakov_2261.inventory_audit(operation, inventory_id, shop_number, product_id,
+                                                 unit_of_measure, unit_price, quantity,
+                                                 old_unit_price, old_quantity)
+        VALUES ('U', NEW.inventory_id, NEW.shop_number, NEW.product_id,
+                NEW.unit_of_measure, NEW.unit_price, NEW.quantity,
+                OLD.unit_price, OLD.quantity);
+        RETURN NEW;
+    ELSIF (TG_OP = 'DELETE') THEN
+        INSERT INTO kyzlakov_2261.inventory_audit(operation, inventory_id, shop_number, product_id,
+                                                 unit_of_measure, unit_price, quantity)
+        VALUES ('D', OLD.inventory_id, OLD.shop_number, OLD.product_id,
+                OLD.unit_of_measure, OLD.unit_price, OLD.quantity);
+        RETURN OLD;
+    END IF;
+    RETURN NULL;
+END;
+$$;
+
+-- Триггер аудита
+CREATE OR REPLACE TRIGGER inventory_audit_trigger
+    AFTER INSERT OR UPDATE OR DELETE ON kyzlakov_2261.inventory
+    FOR EACH ROW
+    EXECUTE FUNCTION kyzlakov_2261.inventory_audit_function();
+```
+## Триггеры бизнес-логики
+### 1. Проверка неотрицательного количества товара
+```sql
+-- Функция проверки неотрицательного количества
+CREATE OR REPLACE FUNCTION kyzlakov_2261.check_quantity_non_negative()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+AS $$
+BEGIN
+    IF NEW.quantity < 0 THEN
+        RAISE EXCEPTION 'Количество товара не может быть отрицательным. Попытка установить: %', NEW.quantity;
+    END IF;
+    RETURN NEW;
+END;
+$$;
+
+-- Триггер проверки
+CREATE OR REPLACE TRIGGER check_quantity_trigger
+    BEFORE INSERT OR UPDATE ON kyzlakov_2261.inventory
+    FOR EACH ROW
+    EXECUTE FUNCTION kyzlakov_2261.check_quantity_non_negative();
+```
+
+## 2. Проверка положительной цены товара
+
+```sql
+-- Функция проверки положительной цены
+CREATE OR REPLACE FUNCTION kyzlakov_2261.check_price_positive()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+AS $$
+BEGIN
+    IF NEW.unit_price <= 0 THEN
+        RAISE EXCEPTION 'Цена товара должна быть положительной. Попытка установить: %', NEW.unit_price;
+    END IF;
+    RETURN NEW;
+END;
+$$;
+
+-- Триггер проверки
+CREATE OR REPLACE TRIGGER check_price_trigger
+    BEFORE INSERT OR UPDATE ON kyzlakov_2261.inventory
+    FOR EACH ROW
+    EXECUTE FUNCTION kyzlakov_2261.check_price_positive();
+```
+
+## Проверка работы триггеров
+### Тестирование триггеров аудита
+```sql
+-- Тест 1: Вставка нового магазина
+INSERT INTO kyzlakov_2261.shop (shop_name, address, floor_space)
+VALUES ('Тестовый магазин', 'г. Тест, ул. Тестовая, д. 1', 150.50);
+
+-- Тест 2: Обновление магазина
+UPDATE kyzlakov_2261.shop 
+SET floor_space = 200.75, address = 'г. Тест, ул. Новая, д. 2'
+WHERE shop_name = 'Тестовый магазин';
+
+-- Тест 3: Вставка нового товара
+INSERT INTO kyzlakov_2261.product (product_name, variety)
+VALUES ('Тестовый товар', 'Премиум');
+
+-- Тест 4: Обновление товара
+UPDATE kyzlakov_2261.product 
+SET variety = 'Стандарт'
+WHERE product_name = 'Тестовый товар';
+
+-- Тест 5: Вставка записи инвентаря
+INSERT INTO kyzlakov_2261.inventory (shop_number, product_id, unit_of_measure, unit_price, quantity)
+SELECT 
+    (SELECT shop_number FROM kyzlakov_2261.shop WHERE shop_name = 'Тестовый магазин'),
+    (SELECT product_id FROM kyzlakov_2261.product WHERE product_name = 'Тестовый товар'),
+    'шт', 100.50, 25;
+```
+![11](docs/images/11.png)
+![22](docs/images/22.png)
+![33](docs/images/33.png)
