@@ -819,6 +819,17 @@ SELECT * FROM kyzlakov_2261.product_audit;
 SELECT * FROM kyzlakov_2261.inventory_audit;
 ```
 
+```sql
+-- История изменений магазинов
+SELECT * FROM kyzlakov_2261.shop_audit ORDER BY audit_id DESC LIMIT 20;
+
+-- История изменений товаров
+SELECT * FROM kyzlakov_2261.product_audit ORDER BY audit_id DESC LIMIT 20;
+
+-- История изменений инвентаря
+SELECT * FROM kyzlakov_2261.inventory_audit ORDER BY audit_id DESC LIMIT 20;
+```
+
 ### 2. Триггеры аудита для таблицы shop
 ```sql
 -- Функция аудита для таблицы shop
@@ -852,7 +863,6 @@ CREATE OR REPLACE TRIGGER shop_audit_trigger
     FOR EACH ROW
     EXECUTE FUNCTION kyzlakov_2261.shop_audit_function();
 ```
-
 
 ### 3. Триггеры аудита для таблицы product
 ```sql
