@@ -261,25 +261,46 @@ ORDER BY total_cost DESC;
 ![upr1](docs/images/upr1.png)
 ---
 
-**Представление 2:** Магазины по адресам
+**Представление 2:** Самый дорогой товар в каждом магазине
 
 ```sql
 CREATE OR REPLACE VIEW kyzlakov_2261.shops_by_address AS
-SELECT shop_number, shop_name, address, floor_space
-FROM kyzlakov_2261.shop
-ORDER BY shop_name;
+SELECT
+    s.shop_number,
+    s.shop_name,
+    s.address,
+    s.floor_space,
+    p.product_name AS most_expensive_product,
+    p.variety,
+    i.unit_price,
+    i.quantity
+FROM kyzlakov_2261.inventory i  
+JOIN kyzlakov_2261.shop s ON i.shop_number = s.shop_number  
+JOIN kyzlakov_2261.product p ON i.product_id = p.product_id  
+WHERE i.unit_price = (  
+    SELECT MAX(unit_price)  
+    FROM kyzlakov_2261.inventory i2  
+    WHERE i2.shop_number = i.shop_number  
+)  
+ORDER BY s.shop_name;
 ```
 
 **Использование**
 ```sql
-SELECT shop_number, shop_name, address
+SELECT 
+    shop_number,
+    shop_name, 
+    address,
+    floor_space,
+    most_expensive_product,
+    unit_price
 FROM kyzlakov_2261.shops_by_address
 WHERE floor_space > 200
 ORDER BY shop_name;
 ```
 
 **Результат использования:**
-![upr2](docs/images/upr2.png)
+![123](docs/images/123.png)
 ---
 
 ## 2. Разработка хранимых процедур с параметрами
@@ -300,7 +321,7 @@ BEGIN
 END;
 $$;
 ```
-**Процедура 2:** Запись пациента на прием  
+**Процедура 2:** 
 
 
 ```sql
