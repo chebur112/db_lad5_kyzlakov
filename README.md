@@ -813,7 +813,9 @@ SELECT * FROM kyzlakov_2261.product_audit;
 
 SELECT * FROM kyzlakov_2261.inventory_audit;
 ```
-
+![test1](docs/images/test1.png)
+![test2](docs/images/test2.png)
+![test3](docs/images/test3.png)
 ```sql
 -- История изменений магазинов
 SELECT * FROM kyzlakov_2261.shop_audit ORDER BY audit_id DESC LIMIT 20;
@@ -1111,3 +1113,8 @@ SELECT
 ![11](docs/images/11.png)
 ![22](docs/images/22.png)
 ![33](docs/images/33.png)
+
+### Результаты журнала аудита
+![aud1](docs/images/aud1.png)
+![aud2](docs/images/aud2.png)
+![aud3](docs/images/aud3.png)
