@@ -307,12 +307,21 @@ ORDER BY shop_name;
 **Процедура 1:** Анализ магазина по номеру
 
 ```sql
-CREATE OR REPLACE PROCEDURE kyzlakov_2261.shop_stats(p_shop INTEGER)
+CREATE OR REPLACE FUNCTION kyzlakov_2261.shop_stats(p_shop INTEGER)
+RETURNS TABLE(
+    items_count INTEGER,
+    total_value NUMERIC
+) 
 LANGUAGE plpgsql AS $$
 BEGIN
+    IF NOT EXISTS (SELECT 1 FROM kyzlakov_2261.shop WHERE shop_number = p_shop) THEN
+        RAISE EXCEPTION 'Магазин с номером % не найден', p_shop;
+    END IF;
+
+    RETURN QUERY
     SELECT 
-        COUNT(*) as items,
-        SUM(unit_price * quantity) as total_value
+        COUNT(*)::INTEGER,
+        COALESCE(SUM(unit_price * quantity), 0)::NUMERIC
     FROM kyzlakov_2261.inventory
     WHERE shop_number = p_shop;
 END;
@@ -327,10 +336,32 @@ CREATE OR REPLACE PROCEDURE kyzlakov_2261.update_price(
     p_price NUMERIC
 )
 LANGUAGE plpgsql AS $$
+DECLARE
+    v_updated INTEGER;
 BEGIN
+
+    IF p_price <= 0 THEN
+        RAISE EXCEPTION 'Цена должна быть положительной. Получено: %', p_price;
+    END IF;
+
+    IF NOT EXISTS (
+        SELECT 1 FROM kyzlakov_2261.inventory 
+        WHERE product_id = p_product AND shop_number = p_shop
+    ) THEN
+        RAISE EXCEPTION 'Товар % в магазине % не найден', p_product, p_shop;
+    END IF;
+
     UPDATE kyzlakov_2261.inventory
     SET unit_price = p_price
     WHERE product_id = p_product AND shop_number = p_shop;
+    
+    GET DIAGNOSTICS v_updated = ROW_COUNT;
+    
+    IF v_updated = 0 THEN
+        RAISE NOTICE 'Цена не изменилась (уже установлено значение %)', p_price;
+    ELSE
+        RAISE NOTICE 'Обновлено % строк', v_updated;
+    END IF;
 END;
 $$;
 ```
@@ -344,9 +375,39 @@ CREATE OR REPLACE PROCEDURE kyzlakov_2261.add_product(
     p_price NUMERIC
 )
 LANGUAGE plpgsql AS $$
+DECLARE
+    v_unit_of_measure VARCHAR(50) := 'шт';
 BEGIN
+
+    IF NOT EXISTS (SELECT 1 FROM kyzlakov_2261.shop WHERE shop_number = p_shop) THEN
+        RAISE EXCEPTION 'Магазин % не найден', p_shop;
+    END IF;
+
+    IF NOT EXISTS (SELECT 1 FROM kyzlakov_2261.product WHERE product_id = p_product) THEN
+        RAISE EXCEPTION 'Товар % не найден', p_product;
+    END IF;
+
+    IF p_qty < 0 THEN
+        RAISE EXCEPTION 'Количество не может быть отрицательным: %', p_qty;
+    END IF;
+
+    IF p_price <= 0 THEN
+        RAISE EXCEPTION 'Цена должна быть положительной: %', p_price;
+    END IF;
+
+    IF EXISTS (
+        SELECT 1 FROM kyzlakov_2261.inventory 
+        WHERE shop_number = p_shop AND product_id = p_product
+    ) THEN
+        RAISE EXCEPTION 'Товар % уже есть в магазине %', p_product, p_shop;
+    END IF;
+
     INSERT INTO kyzlakov_2261.inventory 
-    VALUES (p_shop, p_product, p_qty, p_price);
+        (shop_number, product_id, unit_of_measure, unit_price, quantity)
+    VALUES 
+        (p_shop, p_product, v_unit_of_measure, p_price, p_qty);
+    
+    RAISE NOTICE 'Товар успешно добавлен в магазин';
 END;
 $$;
 ```
@@ -358,9 +419,36 @@ CREATE OR REPLACE PROCEDURE kyzlakov_2261.remove_product(
     p_product INTEGER
 )
 LANGUAGE plpgsql AS $$
+DECLARE
+    v_deleted_count INTEGER;
 BEGIN
+
+    IF NOT EXISTS (SELECT 1 FROM kyzlakov_2261.shop WHERE shop_number = p_shop) THEN
+        RAISE EXCEPTION 'Магазин с номером % не найден', p_shop;
+    END IF;
+
+    IF NOT EXISTS (SELECT 1 FROM kyzlakov_2261.product WHERE product_id = p_product) THEN
+        RAISE EXCEPTION 'Товар с ID % не найден', p_product;
+    END IF;
+
+    IF NOT EXISTS (
+        SELECT 1 FROM kyzlakov_2261.inventory 
+        WHERE shop_number = p_shop AND product_id = p_product
+    ) THEN
+        RAISE EXCEPTION 'Товар % не найден в магазине %', p_product, p_shop;
+    END IF;
+
     DELETE FROM kyzlakov_2261.inventory
     WHERE shop_number = p_shop AND product_id = p_product;
+
+    GET DIAGNOSTICS v_deleted_count = ROW_COUNT;
+
+    IF v_deleted_count > 0 THEN
+        RAISE NOTICE 'Товар % успешно удален из магазина %. Удалено строк: %', 
+                     p_product, p_shop, v_deleted_count;
+    ELSE
+        RAISE NOTICE 'Товар % не был найден в магазине %', p_product, p_shop;
+    END IF;
 END;
 $$;
 ```
@@ -388,6 +476,7 @@ CALL kyzlakov_2261.remove_product(1, 5);
 ```
 ![call1](docs/images/call1.png)
 ![upd](docs/images/upd.png)
+![add](docs/images/upd.png)
 ![del](docs/images/del.png)
 
 ---
