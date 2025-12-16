@@ -812,6 +812,11 @@ CREATE TABLE IF NOT EXISTS kyzlakov_2261.inventory_audit (
     old_unit_price NUMERIC(10,2),
     old_quantity NUMERIC(10,2)
 );
+SELECT * FROM kyzlakov_2261.shop_audit;
+
+SELECT * FROM kyzlakov_2261.product_audit;
+
+SELECT * FROM kyzlakov_2261.inventory_audit;
 ```
 
 ### 2. Триггеры аудита для таблицы shop
