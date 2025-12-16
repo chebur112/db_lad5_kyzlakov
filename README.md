@@ -307,40 +307,63 @@ ORDER BY shop_name;
 **Процедура 1:** Анализ магазина по номеру
 
 ```sql
-CREATE OR REPLACE PROCEDURE kyzlakov_2261.get_shop_stats(
-    p_shop_number INTEGER
-)
-LANGUAGE plpgsql
-AS $$
+CREATE OR REPLACE PROCEDURE kyzlakov_2261.shop_stats(p_shop INTEGER)
+LANGUAGE plpgsql AS $$
 BEGIN
     SELECT 
-        COUNT(*) as total_items,
-        SUM(unit_price * quantity) as total_cost
-    FROM kyzlakov_2261.inventory 
-    WHERE shop_number = p_shop_number;
+        COUNT(*) as items,
+        SUM(unit_price * quantity) as total_value
+    FROM kyzlakov_2261.inventory
+    WHERE shop_number = p_shop;
 END;
 $$;
 ```
 **Процедура 2:** 
 
-
 ```sql
-CREATE OR REPLACE PROCEDURE kyzlakov_2261.get_shop_stats(
-    p_shop_number INTEGER
+CREATE OR REPLACE PROCEDURE kyzlakov_2261.update_price(
+    p_product INTEGER,
+    p_shop INTEGER,
+    p_price NUMERIC
 )
-LANGUAGE plpgsql
-AS $$
+LANGUAGE plpgsql AS $$
 BEGIN
-    SELECT 
-        COUNT(*) as total_items,
-        SUM(unit_price * quantity) as total_cost
-    FROM kyzlakov_2261.inventory 
-    WHERE shop_number = p_shop_number;
+    UPDATE kyzlakov_2261.inventory
+    SET unit_price = p_price
+    WHERE product_id = p_product AND shop_number = p_shop;
 END;
 $$;
-
 ```
+**Процедура 3:** 
 
+```sql
+CREATE OR REPLACE PROCEDURE kyzlakov_2261.add_product(
+    p_shop INTEGER,
+    p_product INTEGER,
+    p_qty NUMERIC,
+    p_price NUMERIC
+)
+LANGUAGE plpgsql AS $$
+BEGIN
+    INSERT INTO kyzlakov_2261.inventory 
+    VALUES (p_shop, p_product, p_qty, p_price);
+END;
+$$;
+```
+**Процедура 4:** 
+
+```sql
+CREATE OR REPLACE PROCEDURE kyzlakov_2261.remove_product(
+    p_shop INTEGER,
+    p_product INTEGER
+)
+LANGUAGE plpgsql AS $$
+BEGIN
+    DELETE FROM kyzlakov_2261.inventory
+    WHERE shop_number = p_shop AND product_id = p_product;
+END;
+$$;
+```
 ---
 ## Проверка работы
 
@@ -355,11 +378,18 @@ SELECT * FROM kyzlakov_2261.shops_by_address LIMIT 3;
 **Проверка процедур:**
 ```sql
 CALL kyzlakov_2261.get_shop_stats(1);
-CALL kyzlakov_2261.add_product_to_shop(2, 'Чай', 'Зеленый');
+
+CALL kyzlakov_2261.update_price(1, 1, 120.50);
+
+CALL kyzlakov_2261.add_product(1, 5, 50.00, 85.00);
+
+CALL kyzlakov_2261.remove_product(1, 5);
 
 ```
 ![call1](docs/images/call1.png)
-![call2](docs/images/call2.png)
+![upd](docs/images/upd.png)
+![del](docs/images/del.png)
+
 ---
 ## 3. Представление сложных запросов при помощи представления
 **Сложное представление:**ТОП товаров по выручке всех магазинов
